@@ -1,0 +1,1 @@
+pip install -U numpy tifffile scikit-image cellpose==3.1.1 zarr meshio scipy
