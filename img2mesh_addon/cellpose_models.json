@@ -1,0 +1,38 @@
+[
+    {
+        "name": "Cyto3",
+        "model_path": "cyto3",
+        "description": "General model for bloboid objects (e.g. cells).",
+        "built-in": true
+    },
+    {
+        "name": "Cyto2",
+        "model_path": "cyto2",
+        "description": "General model for bloboid objects (e.g. cells).",
+        "built-in": true
+    },
+    {
+        "name": "Nuclei",
+        "model_path": "nuclei",
+        "description": "Model made for fluo nuclei images.",
+        "built-in": true
+    },
+    {
+        "name": "TissueNet CP3",
+        "model_path": "tissuenet_cp3",
+        "description": "TissueNet model trained for CellPose 3",
+        "built-in": true
+    },
+    {
+        "name": "LiveCell CP3",
+        "model_path": "livecell_cp3",
+        "description": "LiveCell model trained for CellPose 3",
+        "built-in": true
+    },
+    {
+        "name": "NBX: Nuclei",
+        "model_path": "/home/clement/Documents/projects/2008-NBX/alzheimer-fluo-analysis/qupath-scripts/nbx/models/nbx-nuclei.pt",
+        "description": "NBX model retrained for nuclei segmentation.",
+        "built-in": false
+    }
+]

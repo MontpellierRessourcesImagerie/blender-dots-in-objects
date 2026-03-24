@@ -1,5 +1,6 @@
 import bpy
 
+import json
 from pathlib import Path
 import numpy as np
 from typing import Dict, Tuple, List, Iterable
@@ -18,6 +19,27 @@ def _ensure_collection(name: str) -> bpy.types.Collection:
     elif col.name not in {c.name for c in bpy.context.scene.collection.children}:
         bpy.context.scene.collection.children.link(col)
     return col
+
+def get_cp_models():
+    json_path = Path(__file__).parent / "cellpose_models.json"
+    if not json_path.is_file():
+        raise FileNotFoundError(f"CellPose models JSON not found at {json_path}")
+    with open(json_path, "r") as f:
+        data = json.load(f)
+    models = []
+    for model in data:
+        n = model.get("name", None)
+        p = model.get("model_path", None)
+        d = model.get("description", "")
+        b = model.get("built-in", None)
+        if any(x is None for x in (n, p, d, b)):
+            print(f"Warning: skipping invalid model entry in JSON: {model}")
+            continue
+        if not b and not Path(p).is_file():
+            print(f"Warning: model '{n}' is not built-in and model file not found at {p}, skipping")
+            continue
+        models.append((p, n, d))
+    return models
 
 def import_label_meshes_np(collection_name: str,
                            meshes_by_label: Dict[int, Tuple[np.ndarray, np.ndarray]]
@@ -80,8 +102,12 @@ def import_points_as_empties(
         created.append(obj)
     return created
 
-def segment_and_import(img_path, calib, obj_size_yx, chunk_size):
-    cg = ChunksGenerator(img_path, calib, obj_size_yx)
+def segment_and_import(img_path, secondary, calib, obj_size_yx, chunk_size, model, min_obj_size):
+    cg = ChunksGenerator(
+        [img_path] if not secondary else [img_path, secondary],
+        calib, 
+        obj_size_yx
+    )
     lma = LabelMeshAccumulator(cg.get_calibration(), 0)
 
     sam_fx = get_segment_as_meshes(cg.get_overlap(), cg.get_anisotropy(), lma)

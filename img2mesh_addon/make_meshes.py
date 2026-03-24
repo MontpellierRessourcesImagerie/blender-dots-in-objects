@@ -7,7 +7,15 @@ from collections import defaultdict
 from typing import Dict, Tuple, List
 
 class LabelMeshAccumulator(object):
+    """
+    Accumulates meshes from labeled image chunks.
+    Labels touching the borders are discarded to avoid duplicates.
+    Meshes can be saved as a single PLY file if required.
 
+    Args:
+        spacing_zyx: Tuple of voxel spacing in Z, Y, X order.
+        background: Label value to ignore (default: 0).
+    """
     def __init__(self, spacing_zyx=(1.0, 1.0, 1.0), background=0):
         self.spacing_zyx = spacing_zyx
         self.background = int(background)
@@ -18,20 +26,34 @@ class LabelMeshAccumulator(object):
         z = input_img != 0
         input_img[z] += self.last_lbl
 
-    def add_chunk(self, labels_zyx: np.ndarray, origin_zyx=(0, 0, 0), halo_zyx=(0, 0, 0)):
+    def add_chunk(self, labels_zyx: np.ndarray, origin_zyx=(0, 0, 0), overlap_zyx=(0, 0, 0)):
+        """
+        Records meshes for a new labeled chunk.
+        Labels touching the borders defined by the overlap are discarded.
+
+        Args:
+            labels_zyx: 3D numpy array of shape (Z, Y, X) containing integer labels.
+            origin_zyx: Tuple of the physical origin of the chunk in Z, Y, X order.
+            overlap_zyx: Tuple of the overlap size in voxels in Z, Y, X order. 
+                         Labels touching the borders defined by this overlap will be discarded.
+        """
         if labels_zyx.ndim != 3:
             raise ValueError(f"labels_zyx must be 3D (Z,Y,X); got shape {labels_zyx.shape}")
-        labels_zyx = clear_border(labels_zyx)
-        self.shift_labels(labels_zyx)
         print(f"Converting labels to meshes for block: {origin_zyx}")
 
+        labels_zyx = clear_border(labels_zyx)
+        self.shift_labels(labels_zyx)
+
         Z, Y, X = labels_zyx.shape
-        hx, hy, hz = map(int, halo_zyx)
-        
-        z0 = max(0, hz); z1 = max(z0, min(Z - hz, Z))
-        y0 = max(0, hy); y1 = max(y0, min(Y - hy, Y))
-        x0 = max(0, hx); x1 = max(x0, min(X - hx, X))
+        hx, hy, hz = map(int, overlap_zyx)
+        z0 = max(0, hz)
+        z1 = max(z0, min(Z - hz, Z))
+        y0 = max(0, hy)
+        y1 = max(y0, min(Y - hy, Y))
+        x0 = max(0, hx)
+        x1 = max(x0, min(X - hx, X))
         if (z1 - z0) < 2 or (y1 - y0) < 2 or (x1 - x0) < 2:
+            print("Chunk too small after applying overlap borders, skipping.")
             return
 
         sub = labels_zyx[z0:z1, y0:y1, x0:x1]
