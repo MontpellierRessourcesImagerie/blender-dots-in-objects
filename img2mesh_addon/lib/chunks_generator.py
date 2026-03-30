@@ -10,7 +10,7 @@ class ChunksGenerator(object):
     The shape of all images must be the same, and the calibration is assumed to be the same for all images.
     The overlap is set to the object size (in voxels) adapted to the anisotropy of the images.
     """
-    def __init__(self, img_paths, calib=(1.0, 1.0, 1.0), obj_diam_yx=30):
+    def __init__(self, img_paths, calib=(1.0, 1.0, 1.0), obj_diam_yx=30, use_full_image=False):
         if img_paths is None or len(img_paths) == 0:
             raise ValueError("No image paths provided.")
         
@@ -29,7 +29,8 @@ class ChunksGenerator(object):
         self.shape = None
         object_size_z = int(obj_diam_yx / self.anisotropy_factor)
         self.overlap = (object_size_z, obj_diam_yx, obj_diam_yx)
-    
+        self.use_full_image = use_full_image
+
     def _get_shape(self):
         """
         Extracts the shape of the images by reading all of the TIFF files.
@@ -71,10 +72,14 @@ class ChunksGenerator(object):
         if callback is None:
             return
         
-        img_shape = self.get_shape()
-        if any([a > b for a, b in zip(chunk_size, img_shape)]):
-            raise ValueError(f"Chunk size {chunk_size} should not exceed image shape {img_shape}.")
-        
+        img_shape = tuple(self.get_shape())
+        if (self.use_full_image):
+            chunk_size = img_shape
+            print(f"Using full image as a single chunk with shape {chunk_size}.")
+        old_size = chunk_size
+        chunk_size = tuple(min(cs, s) for cs, s in zip(chunk_size, img_shape))
+        if chunk_size != old_size:
+            print(f"Warning: chunk_size {old_size} is larger than image shape {img_shape}, reducing to {chunk_size}.")
         Z, Y, X = img_shape
         step_z  = Z if chunk_size[0] >= Z else max(chunk_size[0] - self.overlap[0], 1)
         step_y  = Y if chunk_size[1] >= Y else max(chunk_size[1] - self.overlap[1], 1)
@@ -95,7 +100,7 @@ class ChunksGenerator(object):
                     x1 = min(x0 + chunk_size[2], X)
                     chunks = tuple(arr[z0:z1, y0:y1, x0:x1] for arr in arrays)
                     callback(
-                        *chunks, 
+                        chunks, 
                         (z0, y0, x0), 
                         (z1, y1, x1), 
                         self.calibration, 
@@ -160,5 +165,29 @@ def test_spots_detection():
     cg.load_by_chunks((140, 140, 300), callback=sf_fx)
     sd3d.save_as(path / "spots.csv")
 
+def double_export_chunks_callback(chunks, origin, end, calib, index):
+    from .chunk_callbacks import get_save_chunk_as
+
+    print(f"Processing chunk {index} at origin {origin} with end {end} and calibration {calib}")
+    sca_fx_1 = get_save_chunk_as("/tmp/exported_chunks_1")
+    sca_fx_2 = get_save_chunk_as("/tmp/exported_chunks_2")
+    sca_fx_1(chunks[0], origin, end, calib, index)
+    sca_fx_2(chunks[1], origin, end, calib, index)
+
+def example_export_chunks():
+    from .chunk_callbacks import get_save_chunk_as
+
+    path = Path("/home/clement/Documents/projects/mifobio-2025/flash-tuto/data/c_elegans")
+    img_path = path / "eft3RW10035L1_0125071.tif"
+    cg = ChunksGenerator(
+        [
+            img_path,
+            img_path
+        ],
+        (0.122, 0.116, 0.116),
+        15
+    )
+    cg.load_by_chunks((140, 140, 300), callback=double_export_chunks_callback)
+
 if __name__ == "__main__":
-    test_spots_detection()
+    example_export_chunks()

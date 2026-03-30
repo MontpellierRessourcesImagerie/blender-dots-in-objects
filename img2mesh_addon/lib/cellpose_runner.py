@@ -37,7 +37,9 @@ class CellPoseRunner3D(object):
             pretrained_model=self.model_name
         )
 
-    def run(self, image_main, image_secondary=None):
+    def run(self, images):
+        image_main = images[0]
+        image_secondary = images[1] if len(images) > 1 else None
         self.instanciate_model()
         if self.model is None:
             raise ValueError("The model has not been created.")
@@ -59,7 +61,7 @@ class CellPoseRunner3D(object):
             z_axis=1,
             channel_axis=0,
             min_size=self.min_size,
-            flow3D_smooth=2
+            # flow3D_smooth=1
         )
         return labels
     
@@ -96,7 +98,7 @@ def example_run_cellpose(setup=1):
         ani_factor=ani_factor,
         min_size=min_obj
     )
-    lbls = cp3d.run(data_main, data_sec)
+    lbls = cp3d.run([data_main, data_sec] if data_sec is not None else [data_main])
 
     if lbls is not None:
         out_path = output_folder / f"cp_result-{setup}.tif"

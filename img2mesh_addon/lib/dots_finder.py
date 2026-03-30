@@ -1,8 +1,6 @@
 from scipy.ndimage import (
     gaussian_laplace, 
     gaussian_filter,
-    prewitt,
-    sobel,
     grey_opening
 )
 from skimage.filters import threshold_otsu
@@ -51,6 +49,9 @@ def spots_pre_filters():
         'Hessian determinant'      : prefilter_hessian_determinant
     }
 
+def prefilters_as_enum():
+    return [(name, name, "") for name in spots_pre_filters().keys()]
+
 class SpotsFinder3D(object):
     """
     Class supposed to find spots in 3D images, using a combination of pre-filtering and local maxima detection.
@@ -75,7 +76,10 @@ class SpotsFinder3D(object):
         self.anisotropy    = calib[0] / calib[1]
         self.prefilter     = spots_pre_filters().get(prefilter_name, prefilter_none)
 
-    def find_spots(self, chunk, origin=(0, 0, 0)):
+    def find_spots(self, chunks, origin=(0, 0, 0)):
+        if len(chunks) != 1:
+            raise ValueError("Expected a single chunk for spot detection, got multiple.")
+        chunk = chunks[0]
         filtered = self.prefilter(
             chunk, 
             sigmas=(self.sigma / self.anisotropy, self.sigma, self.sigma)

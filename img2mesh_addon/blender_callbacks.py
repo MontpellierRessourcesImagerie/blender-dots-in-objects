@@ -1,15 +1,17 @@
 import bpy
 
+import os
+import random
 import json
 from pathlib import Path
 import numpy as np
 from typing import Dict, Tuple, List, Iterable
 
-from .chunks_generator import ChunksGenerator
-from .make_meshes import LabelMeshAccumulator
-from .spots_finder import SpotsFinder3D
+from .lib.chunks_generator import ChunksGenerator
+from .lib.make_meshes import LabelMeshAccumulator
+from .lib.dots_finder import SpotsFinder3D
 
-from .chunk_callbacks import get_segment_as_meshes, get_spots_detector
+from .lib.chunk_callbacks import get_segment_as_meshes, get_spots_detector
 
 def _ensure_collection(name: str) -> bpy.types.Collection:
     col = bpy.data.collections.get(name)
@@ -20,8 +22,12 @@ def _ensure_collection(name: str) -> bpy.types.Collection:
         bpy.context.scene.collection.children.link(col)
     return col
 
-def get_cp_models():
-    json_path = Path(__file__).parent / "cellpose_models.json"
+def get_cp_models(go_to=None):
+    base_path = Path(__file__).parent
+    if go_to is not None:
+        base_path = base_path / Path(go_to)
+    json_path = base_path / "cellpose_models.json"
+    
     if not json_path.is_file():
         raise FileNotFoundError(f"CellPose models JSON not found at {json_path}")
     with open(json_path, "r") as f:
@@ -49,7 +55,7 @@ def import_label_meshes_np(collection_name: str,
       - vertices: np.ndarray shape (N, 3), float
       - faces:    np.ndarray shape (M, 3 or 4), int (triangles or quads)
     """
-    col = _ensure_collection("nuclei-"+collection_name)
+    col = _ensure_collection(collection_name)
     created: List[bpy.types.Object] = []
 
     for label in sorted(meshes_by_label.keys()):
@@ -90,7 +96,7 @@ def import_points_as_empties(
     empty_type: str = "PLAIN_AXES",
     size: float = 0.1,
 ):
-    col = _ensure_collection("spots-"+collection_name)
+    col = _ensure_collection("dots-" + collection_name)
     created = []
     for i, p in enumerate(points, 1):
         x, y, z = map(float, p)
@@ -102,25 +108,43 @@ def import_points_as_empties(
         created.append(obj)
     return created
 
-def segment_and_import(img_path, secondary, calib, obj_size_yx, chunk_size, model, min_obj_size):
+def segment_and_import(img_path, secondary, calib, obj_size_yx, chunk_size, model, min_obj_size, use_full_image):
     cg = ChunksGenerator(
         [img_path] if not secondary else [img_path, secondary],
         calib, 
-        obj_size_yx
+        obj_size_yx,
+        use_full_image
     )
     lma = LabelMeshAccumulator(cg.get_calibration(), 0)
-
-    sam_fx = get_segment_as_meshes(cg.get_overlap(), cg.get_anisotropy(), lma)
-
-    cg.load_by_chunks(chunk_size, callback=sam_fx) # (140, 140, 300)
+    sam_fx = get_segment_as_meshes(
+        cg.get_overlap(), 
+        cg.get_anisotropy(), 
+        model,
+        min_obj_size,
+        lma
+    )
+    cg.load_by_chunks(chunk_size, callback=sam_fx)
     meshes = lma.finalize()
-    import_label_meshes_np(img_path.name, meshes)
+    name = os.path.basename(img_path)
+    name, _ = os.path.splitext(name)
+    import_label_meshes_np(name, meshes)
 
-def detect_and_import(img_path, calib, thr, chunk_size):
-    cg = ChunksGenerator(img_path, calib, 0)
-    sd3d = SpotsFinder3D(cg.get_calibration(), thr)
+def detect_and_import(img_path, calib, thr, chunk_size, sigma, prefilter, use_full_image=False):
+    cg = ChunksGenerator([img_path], calib, 0, use_full_image=use_full_image)
+    sd3d = SpotsFinder3D(sigma, cg.get_calibration(), thr, 1, prefilter)
     sd_fx = get_spots_detector(sd3d)
     cg.load_by_chunks(chunk_size, callback=sd_fx) # (140, 140, 300)
     points = sd3d.get_all_spots()
     points = [(x, y, z) for (z, y, x) in points]
-    import_points_as_empties(img_path.name, points, prefix="spot", empty_type="SPHERE", size=0.2)
+    name = os.path.basename(img_path)
+    name, _ = os.path.splitext(name)
+    empty_types = ['PLAIN_AXES', 'ARROWS', 'SINGLE_ARROW', 'CIRCLE', 'CUBE', 'SPHERE']
+    index = random.randint(0, len(empty_types) - 1)
+    empty_type = empty_types[index]
+    import_points_as_empties(
+        name, 
+        points, 
+        prefix="spot", 
+        empty_type=empty_type, 
+        size=0.2
+    )

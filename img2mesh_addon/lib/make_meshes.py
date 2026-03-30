@@ -72,7 +72,7 @@ class LabelMeshAccumulator(object):
         buffer_eq = np.zeros_like(sub, dtype=bool)
         buffer_mk = np.zeros_like(sub, dtype=np.float32)
         buffer_gs = np.zeros_like(sub, dtype=np.float32)
-        sigma_yx  = 0.75
+        sigma_yx  = 0.8
         sigma_z   = sigma_yx * (dy / dz)
 
         for lbl in unique_vals.astype(int):

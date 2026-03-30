@@ -3,7 +3,7 @@ import tifffile
 import numpy as np
 
 from .cellpose_runner import CellPoseRunner3D
-from .spots_finder import SpotsFinder3D
+from .dots_finder import SpotsFinder3D
 
 def get_save_chunk_as(folder_path):
     folder_path = Path(folder_path)
@@ -31,13 +31,19 @@ def get_cellpose_run(folder_path, obj_size, ani_factor):
         print(f"Saved labels {img_path.name} ({np.max(lbls)} nuclei found)")
     return cellpose_run
 
-def get_segment_as_meshes(overlap, ani_factor, lma):
+def get_segment_as_meshes(overlap, ani_factor, model, min_size, lma):
     obj_size_yx = overlap[-1]
-    cp3d = CellPoseRunner3D("cyto3", True, obj_size_yx, ani_factor)
+    cp3d = CellPoseRunner3D(
+        model, 
+        True, 
+        obj_size_yx, 
+        ani_factor,
+        min_size
+    )
     def segment_as_meshes(chunk, u, v, calib, index):
         calib_origin = tuple([u[i] * calib[i] for i in range(len(calib))])
         labeled = cp3d.run(chunk)
-        lma.add_chunk(labeled, origin_zyx=calib_origin, halo_zyx=(0, 0, 0))
+        lma.add_chunk(labeled, origin_zyx=calib_origin, overlap_zyx=(0, 0, 0))
     return segment_as_meshes
 
 def get_spots_detector(sd3d):

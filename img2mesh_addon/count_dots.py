@@ -4,7 +4,7 @@ import json
 import csv
 import io
 
-def get_nuclei_collection():
+def get_object_collection():
     """
     Probes the scene to find the collection containing the nuclei.
     The nuclei collection's name must start with "nuclei" and contain only meshes.
@@ -18,7 +18,7 @@ def get_nuclei_collection():
         return c
     return None
 
-def get_spots_collections():
+def get_dots_collections():
     """
     Probes the scene to find all the collections containing spots.
     A collection of spot must have a name starting with "spots" and contain only empties.
@@ -50,7 +50,7 @@ def build_kd_tree():
     Builds a KD-Tree containing the vertices of all nuclei present in the collection.
     Returns the KD Tree, and the array of correspondance with objects.
     """
-    nuclei_collection = get_nuclei_collection()
+    nuclei_collection = get_object_collection()
     if nuclei_collection is None:
         raise ValueError("The collection containing nuclei is missing.")
     ttl_vertices = get_total_vertices(nuclei_collection)
@@ -69,9 +69,9 @@ def build_kd_tree():
     kd.balance()
     return kd, vertex_to_object_map, normals
 
-def get_spots_per_channel():
+def get_dots_per_channel():
     all_spots = {}
-    collections = get_spots_collections()
+    collections = get_dots_collections()
     p = "spots_"
     for collection in collections:
         name = collection.name[len(p):]
@@ -79,9 +79,9 @@ def get_spots_per_channel():
         all_spots[name] = locations
     return all_spots
 
-def count_spots():
-    all_spots = get_spots_per_channel()
-    nuclei_collection = get_nuclei_collection()
+def count_dots():
+    all_spots = get_dots_per_channel()
+    nuclei_collection = get_object_collection()
     template = {c: 0 for c in all_spots.keys()}
     accumulator = {n.name: template.copy() for n in nuclei_collection.objects}
     for ch_name, spots in all_spots.items():
@@ -120,14 +120,14 @@ def new_text_in_editor(contents="", name="results.csv"):
     #_show_in_text_editor(txt)
     return txt
 
-def spot_to_closest_nucleus():
+def dots_to_closest_object():
     """
     Loops through the spots (empties) and searches for the closest vertex.
     Sets the parent of each spot to its owner nuclei.
     Counts the number of spots per nuclei
     """
     kd, mapping, normals = build_kd_tree()
-    all_spots = get_spots_per_channel()
+    all_spots = get_dots_per_channel()
     
     for spots_channel, spots in all_spots.items():
         print(f"Processing spots channel: {spots_channel}")
@@ -145,13 +145,13 @@ def spot_to_closest_nucleus():
             empty.parent = closest_object
             empty.matrix_parent_inverse = closest_object.matrix_world.inverted()
 
-def spots_per_nucleus():
-    spot_to_closest_nucleus()
-    acc = count_spots()
+def dots_per_object():
+    dots_to_closest_object()
+    acc = count_dots()
     csv_txt = counters_dict_to_csv(acc)
     new_text_in_editor(csv_txt)
     print("Results available in: scripting/results.csv")
 
 if __name__ == "__main__":
-    spots_per_nucleus()
+    dots_per_object()
 
