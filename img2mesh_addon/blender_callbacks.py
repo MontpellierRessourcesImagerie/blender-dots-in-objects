@@ -129,6 +129,10 @@ def segment_and_import(img_path, secondary, calib, obj_size_yx, chunk_size, mode
     name, _ = os.path.splitext(name)
     import_label_meshes_np(name, meshes)
 
+def get_next_index():
+    collections = len([c for c in bpy.data.collections if c.name.startswith("dots-")])
+    return collections
+
 def detect_and_import(img_path, calib, thr, chunk_size, sigma, prefilter, use_full_image=False):
     cg = ChunksGenerator([img_path], calib, 0, use_full_image=use_full_image)
     sd3d = SpotsFinder3D(sigma, cg.get_calibration(), thr, 1, prefilter)
@@ -138,13 +142,13 @@ def detect_and_import(img_path, calib, thr, chunk_size, sigma, prefilter, use_fu
     points = [(x, y, z) for (z, y, x) in points]
     name = os.path.basename(img_path)
     name, _ = os.path.splitext(name)
-    empty_types = ['PLAIN_AXES', 'ARROWS', 'SINGLE_ARROW', 'CIRCLE', 'CUBE', 'SPHERE']
-    index = random.randint(0, len(empty_types) - 1)
+    empty_types = ['PLAIN_AXES', 'CUBE', 'SPHERE', 'CIRCLE', 'ARROWS', 'SINGLE_ARROW']
+    index = get_next_index() % len(empty_types)
     empty_type = empty_types[index]
     import_points_as_empties(
         name, 
         points, 
-        prefix="spot", 
+        prefix="dot", 
         empty_type=empty_type, 
-        size=0.2
+        size=0.25
     )

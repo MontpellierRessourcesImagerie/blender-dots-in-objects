@@ -10,28 +10,34 @@ bl_info = {
 
 import bpy
 from bpy.props import (
-    StringProperty, 
-    IntProperty, 
+    StringProperty,
+    IntProperty,
     FloatProperty,
-    FloatVectorProperty, 
-    IntVectorProperty, 
+    FloatVectorProperty,
+    IntVectorProperty,
     PointerProperty,
     EnumProperty,
-    BoolProperty
+    BoolProperty,
+    PointerProperty
 )
 from bpy.types import (
-    PropertyGroup, 
-    Operator, 
+    PropertyGroup,
+    Operator,
     Panel
 )
 
 import os
 from .blender_callbacks import (
-    segment_and_import, 
+    segment_and_import,
     detect_and_import,
     get_cp_models
 )
-from .count_dots import dots_per_object
+from .count_dots import (
+    dots_to_closest_object,
+    dots_per_object,
+    remove_dots_outside_objects,
+    count_co_occurrences
+)
 from .lib.dots_finder import prefilters_as_enum
 
 def update_files_list(self, context):
@@ -116,7 +122,7 @@ class DotsObjects_Props(PropertyGroup):
     
     calib: FloatVectorProperty(
         name="Calibration",
-        description="Voxel size (aka 'sampling disntace') in microns.",
+        description="Voxel size (aka 'sampling distance') in microns.",
         size=3, default=(0.116, 0.116, 0.122), subtype='XYZ',
         precision=4
     )
@@ -130,14 +136,21 @@ class DotsObjects_Props(PropertyGroup):
         description="Whether to process the full image at once (no chunking). Not recommended for large images.",
         default=False
     )
-    co_occ_type: EnumProperty(
-        name="Co-occurrence type",
-        description="Type of co-occurrence to count.",
-        items=[
-            ('EXCLUSIVE', "Exclusive", "When a dot is engaged in a relationship, it cannot participate in another relationship."),
-            ('PRESENCE' , "Presence" , "Simply checks if a dot is within a certain distance of an object, without exclusivity."),
-        ],
-        default='EXCLUSIVE'
+
+    objects_collection: PointerProperty(
+        name="Objects collection",
+        description="Collection in which segmented objects are imported.",
+        type=bpy.types.Collection
+    )
+    co_occ_per_obj: BoolProperty(
+        name="Count co-occurrences per object",
+        description="Whether to count co-occurrences of dots per object (instead of globally).",
+        default=True
+    )
+    co_occ_dist_threshold: FloatProperty(
+        name="Co-occurrence distance threshold",
+        description="Maximum distance (in microns) between dots to be considered co-occurring.",
+        default=0.5, min=0.001, max=1000.0
     )
     
     
@@ -238,7 +251,24 @@ class ASSIGN_DOTS_OT_Launch(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        dots_per_object()
+        collection = context.scene.objseg_props.objects_collection
+        if collection is None:
+            self.report({'ERROR'}, "Please select an objects collection.")
+            return {'CANCELLED'}
+        dots_to_closest_object(collection)
+        return {'FINISHED'}
+    
+class COUNT_DOTS_PER_OBJECT_OT_Launch(Operator):
+    bl_idname = "count_dots_per_object.launch"
+    bl_label = "Count dots per object"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        collection = context.scene.objseg_props.objects_collection
+        if collection is None:
+            self.report({'ERROR'}, "Please select an objects collection.")
+            return {'CANCELLED'}
+        dots_per_object(collection)
         return {'FINISHED'}
     
 class COUNT_CO_OCCUR_OT_Launch(Operator):
@@ -247,7 +277,19 @@ class COUNT_CO_OCCUR_OT_Launch(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        # count_co_occurrences()
+        max_dist = context.scene.objseg_props.co_occ_dist_threshold
+        per_obj = context.scene.objseg_props.co_occ_per_obj
+        obj_collection = context.scene.objseg_props.objects_collection
+        count_co_occurrences(max_dist, per_obj, obj_collection)
+        return {'FINISHED'}
+    
+class REMOVE_DOTS_OUTSIDE_OT_Launch(Operator):
+    bl_idname = "remove_dots_outside.launch"
+    bl_label = "Remove dots outside objects"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        remove_dots_outside_objects()
         return {'FINISHED'}
 
 # ---- UI Panel (N-panel, 3D View) ----
@@ -290,19 +332,33 @@ class OBJSEG_PT_Panel(Panel):
         col.separator()
         col = layout.box()
 
-        col.label(text="Dots", icon='GROUP_VERTEX')
+        col.label(text="Dots channel", icon='GROUP_VERTEX')
         col.prop(props, "dots_path", text="Dots")
-        col.prop(props, "dots_prefilter", text="Dots pre-filter")
-        col.prop(props, "dots_sigma", text="Sigma")
+        
+        row = col.row(align=True)
+        row.prop(props, "dots_prefilter", text="Pre-filter")
+        row.prop(props, "dots_sigma", text="Sigma")
+        
         row = col.row(align=True)
         row.prop(props, "auto_threshold", text="Auto (Otsu)")
         row.prop(props, "dots_threshold", text="Dots threshold")
         col.operator("dotsdec.launch", text="Detect dots", icon='PLAY')
 
         col.separator()
-        col = layout.column(align=True)
+        col = layout.column()
 
-        col.operator("assign_dots.launch", text="Assign dots to objects", icon='PARTICLES')
+        row = col.row(align=True)
+        row.prop(props, "objects_collection", text="")
+        row.operator("assign_dots.launch", text="Assign dots to objects", icon='PARTICLES')
+
+        row = col.row(align=True)
+        row.operator("remove_dots_outside.launch", text="Remove dots outside objects", icon='CANCEL')
+        row.operator("count_dots_per_object.launch", text="Count dots per object", icon='SORTBYEXT')
+
+        row = col.row(align=True)
+        row.prop(props, "co_occ_per_obj", text="Per object?")
+        row.prop(props, "co_occ_dist_threshold", text="Max distance")
+        row.operator("count_co_occur.launch", text="Count co-occurrences", icon='SORTBYEXT')
 
 # ---- register ----
 
@@ -312,6 +368,9 @@ classes = (
     DOTSDEC_OT_Launch,
     ASSIGN_DOTS_OT_Launch,
     OBJSEG_PT_Panel,
+    COUNT_DOTS_PER_OBJECT_OT_Launch,
+    COUNT_CO_OCCUR_OT_Launch,
+    REMOVE_DOTS_OUTSIDE_OT_Launch
 )
 
 def register():
