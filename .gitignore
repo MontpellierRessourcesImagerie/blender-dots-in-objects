@@ -1,5 +1,3 @@
-__pycache__
-img2mesh_addon/__pycache__
-img2mesh_addon/utils/__pycache__
-img2mesh_addon/lib/__pycache__
+dots_in_objects_addon/__pycache__
+dots_in_objects_addon/lib/__pycache__
 .vscode
